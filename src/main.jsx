@@ -1,10 +1,51 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
+import { MOCK_ACTIVO, estadoMock } from './config';
+import { usarTransporte } from './api/transporte';
 import './index.css';
 
-createRoot(document.getElementById('root')).render(
-  <StrictMode>
-    <App />
-  </StrictMode>
-);
+// Si el Service Worker no responde en este tiempo, se usa el modo en memoria.
+const ESPERA_SERVICE_WORKER_MS = 5000;
+
+// Activa el backend simulado ANTES de montar React, para que ninguna petición
+// salga antes de que alguien pueda responderla. import() dinámico: el código
+// del mock se descarga solo si se usa.
+async function habilitarMock() {
+  if (!MOCK_ACTIVO) return;
+  try {
+    if (!('serviceWorker' in navigator)) throw new Error('Este navegador no permite Service Workers.');
+    const { worker } = await import('./mocks/browser');
+    const inicio = worker.start({
+      serviceWorker: { url: `${import.meta.env.BASE_URL}mockServiceWorker.js` },
+      onUnhandledRequest: 'bypass', // archivos del propio sitio: que pasen sin aviso
+      quiet: true,
+    });
+    const espera = new Promise((_, rechazar) =>
+      setTimeout(() => rechazar(new Error('El Service Worker no respondió a tiempo.')), ESPERA_SERVICE_WORKER_MS)
+    );
+    await Promise.race([inicio, espera]);
+    estadoMock.modo = 'service-worker';
+  } catch (error) {
+    // Plan B: los mismos handlers, respondiendo dentro de la página.
+    console.warn('API simulada sin Service Worker; se usa el modo en memoria.', error);
+    const { crearFetchEnMemoria } = await import('./mocks/memoria');
+    usarTransporte(crearFetchEnMemoria());
+    estadoMock.modo = 'memoria';
+    estadoMock.error = error;
+  }
+}
+
+// La aplicación se monta SIEMPRE, pase lo que pase con el mock: nunca una
+// página en blanco.
+habilitarMock()
+  .catch((error) => console.error('No se pudo iniciar la API simulada:', error))
+  .finally(() => {
+    // Queda a la vista en el HTML (útil para las pruebas en cada navegador).
+    document.documentElement.dataset.modoApi = estadoMock.modo;
+    createRoot(document.getElementById('root')).render(
+      <StrictMode>
+        <App />
+      </StrictMode>
+    );
+  });
