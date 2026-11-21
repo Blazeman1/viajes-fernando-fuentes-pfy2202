@@ -12,10 +12,12 @@ const ESPERA_SERVICE_WORKER_MS = 5000;
 // Worker pero el registro ya existe, MSW llama a location.reload() para tomar
 // el control. En Firefox, al recargar, la página nueva volvía a quedar sin
 // control y MSW recargaba una y otra vez sin mostrar nada.
-// Se marca en sessionStorage que MSW está arrancando; si la página se vuelve a
-// cargar con la marca puesta, es que MSW recargó en pleno arranque: esta vez no
-// se inicia y se usa el modo en memoria. Como mucho, una recarga extra.
+// Se marca en sessionStorage que MSW está arrancando y la marca se quita cuando
+// la página lleva 1,5 s estable. Si la página se vuelve a cargar con la marca
+// puesta, es que MSW la recargó en pleno arranque: esta vez no se inicia y se
+// usa el modo en memoria. Como mucho, una recarga extra.
 const MARCA_ARRANQUE = 'rumbo-sur-msw-arrancando';
+const ESTABLE_MS = 1500;
 
 function leerMarca() {
   try {
@@ -56,7 +58,10 @@ async function habilitarMock() {
       setTimeout(() => rechazar(new Error('El Service Worker no respondió a tiempo.')), ESPERA_SERVICE_WORKER_MS)
     );
     await Promise.race([inicio, espera]);
-    escribirMarca(false);
+    // La marca se borra cuando la página lleva un rato estable. En Firefox el
+    // arranque de MSW puede terminar bien aunque ya pidió la recarga: si se
+    // borrara de inmediato, la página siguiente no sabría que hubo un ciclo.
+    setTimeout(() => escribirMarca(false), ESTABLE_MS);
     estadoMock.modo = 'service-worker';
     // Si más adelante el Service Worker deja de responder, se pasa al plan B.
     configurarRespaldo(() => activarModoMemoria(new Error('El Service Worker dejó de interceptar las peticiones.')));
