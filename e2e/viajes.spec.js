@@ -165,11 +165,29 @@ test.describe('Robustez', () => {
     await page.getByRole('link', { name: 'Madrid, España' }).click();
     await expect(page.getByRole('heading', { name: 'El servidor tuvo un problema' })).toBeVisible({ timeout: 15_000 });
 
+    // El panel se cerró solo al elegir: se vuelve a abrir para elegir "Normal".
+    await panel.locator('summary').click();
     await panel.getByRole('button', { name: 'Normal' }).click();
+    await expect(panel).not.toHaveAttribute('open', '');
     await page.getByRole('button', { name: 'Reintentar' }).click();
     await expect(page.getByRole('heading', { level: 1, name: 'Madrid, España' })).toBeVisible();
   });
 
+
+  // Reproduce lo que le pasó a Firefox al recargar: la página que se cierra le
+  // avisa al Service Worker "me fui" y este deja de atender a la página nueva.
+  test('si el Service Worker deja de interceptar, la app pasa sola al modo en memoria', async ({ page }) => {
+    await page.goto('./');
+    await expect(page.locator('main article')).toHaveCount(10);
+    const modo = await page.evaluate(() => document.documentElement.dataset.modoApi);
+    test.skip(modo !== 'service-worker', 'Este navegador ya está en modo en memoria');
+
+    await page.evaluate(() => navigator.serviceWorker.controller.postMessage('CLIENT_CLOSED'));
+    await page.getByRole('link', { name: 'Tokio, Japón' }).click();
+    await expect(page.getByRole('heading', { level: 1, name: 'Tokio, Japón' })).toBeVisible();
+    await expect(page.getByRole('article', { name: /^Vuelo / })).toHaveCount(5);
+    await expect(page.locator('html')).toHaveAttribute('data-modo-api', 'memoria');
+  });
 });
 
 test.describe('Sin Service Worker', () => {

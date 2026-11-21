@@ -8,6 +8,7 @@ import { configurarREST, obtenerDestino, obtenerDestinos } from './rest';
 import { OPCIONES_DE_VIAJE, SELECCION_VIAJE, crearClienteGraphQL } from './graphql';
 import { ApiError, errorDesdeGraphQL } from './errores';
 import { gql } from '@apollo/client';
+import { CABECERA_MOCK } from '../config';
 
 const servidor = setupServer(...handlers);
 let peticiones = 0;
@@ -37,6 +38,14 @@ describe('API REST de destinos', () => {
       expect(d.actividadesPopulares.length).toBeGreaterThan(0);
     }
     expect(destinos.find((d) => d.id === 'cusco').pais).toBe('Perú');
+  });
+
+  it('marca cada respuesta simulada con su cabecera (también los errores)', async () => {
+    const ok = await fetch('http://localhost/api/destinos');
+    const noExiste = await fetch('http://localhost/api/destinos/atlantida');
+    expect(ok.headers.get(CABECERA_MOCK)).toBe('1');
+    expect(noExiste.status).toBe(404);
+    expect(noExiste.headers.get(CABECERA_MOCK)).toBe('1');
   });
 
   it('entrega la ficha completa de un destino', async () => {

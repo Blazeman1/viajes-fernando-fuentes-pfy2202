@@ -2,7 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
 import { MOCK_ACTIVO, estadoMock } from './config';
-import { usarTransporte } from './api/transporte';
+import { configurarRespaldo, usarTransporte } from './api/transporte';
 import './index.css';
 
 // Si el Service Worker no responde en este tiempo, se usa el modo en memoria.
@@ -26,14 +26,21 @@ async function habilitarMock() {
     );
     await Promise.race([inicio, espera]);
     estadoMock.modo = 'service-worker';
+    // Si más adelante el Service Worker deja de responder, se pasa al plan B.
+    configurarRespaldo(() => activarModoMemoria(new Error('El Service Worker dejó de interceptar las peticiones.')));
   } catch (error) {
-    // Plan B: los mismos handlers, respondiendo dentro de la página.
-    console.warn('API simulada sin Service Worker; se usa el modo en memoria.', error);
-    const { crearFetchEnMemoria } = await import('./mocks/memoria');
-    usarTransporte(crearFetchEnMemoria());
-    estadoMock.modo = 'memoria';
-    estadoMock.error = error;
+    await activarModoMemoria(error);
   }
+}
+
+// Plan B: los mismos handlers, respondiendo dentro de la página.
+async function activarModoMemoria(motivo) {
+  console.warn('API simulada sin Service Worker; se usa el modo en memoria.', motivo);
+  const { crearFetchEnMemoria } = await import('./mocks/memoria');
+  usarTransporte(crearFetchEnMemoria());
+  estadoMock.modo = 'memoria';
+  estadoMock.error = motivo;
+  document.documentElement.dataset.modoApi = 'memoria';
 }
 
 // La aplicación se monta SIEMPRE, pase lo que pase con el mock: nunca una

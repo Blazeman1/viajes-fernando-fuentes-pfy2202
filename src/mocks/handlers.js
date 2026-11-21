@@ -4,6 +4,7 @@
 // Los mismos handlers se usan en el navegador (Service Worker), en el modo
 // de respaldo en memoria y en las pruebas de Vitest (Node).
 import { HttpResponse, delay, graphql, http } from 'msw';
+import { CABECERA_MOCK } from '../config';
 import { DESTINOS, VUELOS } from './datos';
 import { ejecutarGraphQL } from './esquema';
 import { debeFallarUnaVez, latencias, obtenerEscenario } from './simulador';
@@ -21,6 +22,14 @@ async function aplicarEscenario(clave, formatoError) {
   }
   return null;
 }
+
+// Marca la respuesta como simulada. (HttpResponse.error() no lleva cabeceras:
+// representa una falla de red.)
+const marcar = (resolver) => async (info) => {
+  const respuesta = await resolver(info);
+  if (respuesta && respuesta.type !== 'error') respuesta.headers.set(CABECERA_MOCK, '1');
+  return respuesta;
+};
 
 const errorREST = (mensaje, status) => HttpResponse.json({ mensaje }, { status });
 // Una caída del servidor GraphQL no alcanza a producir una respuesta GraphQL:
@@ -69,24 +78,24 @@ async function resolverGraphQL({ query, variables, operationName }) {
 
 export const handlers = [
   // ---------------- API REST ----------------
-  http.get('*/api/destinos', async ({ request }) => {
+  http.get('*/api/destinos', marcar(async ({ request }) => {
     const falla = await aplicarEscenario(request.url, errorREST);
     if (falla) return falla;
     return HttpResponse.json(DESTINOS.map(resumen));
-  }),
+  })),
 
-  http.get('*/api/destinos/:id', async ({ request, params }) => {
+  http.get('*/api/destinos/:id', marcar(async ({ request, params }) => {
     const falla = await aplicarEscenario(request.url, errorREST);
     if (falla) return falla;
     const destino = DESTINOS.find((d) => d.id === params.id);
     if (!destino) return errorREST(`No existe el destino "${params.id}".`, 404);
     return HttpResponse.json(ficha(destino));
-  }),
+  })),
 
   // ---------------- API GraphQL ----------------
   // Las operaciones que usa la aplicación, por nombre (como en la guía)...
-  graphql.query('OpcionesDeViaje', resolverGraphQL),
-  graphql.query('SeleccionViaje', resolverGraphQL),
+  graphql.query('OpcionesDeViaje', marcar(resolverGraphQL)),
+  graphql.query('SeleccionViaje', marcar(resolverGraphQL)),
   // ...y cualquier otra consulta válida contra el mismo esquema.
-  graphql.operation(resolverGraphQL),
+  graphql.operation(marcar(resolverGraphQL)),
 ];

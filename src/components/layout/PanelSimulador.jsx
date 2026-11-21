@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from 'react';
+import { useRef, useSyncExternalStore } from 'react';
 import { ESCENARIOS, cambiarEscenario, obtenerEscenario, suscribirEscenario } from '../../mocks/simulador';
 import { estadoMock } from '../../config';
 
@@ -6,10 +6,17 @@ import { estadoMock } from '../../config';
 // (REST y GraphQL a la vez) para ver cómo responde la interfaz.
 export default function PanelSimulador() {
   const escenario = useSyncExternalStore(suscribirEscenario, obtenerEscenario);
+  const panelRef = useRef(null);
+  // Al elegir un escenario el panel se cierra: en un teléfono tapaba el
+  // contenido (por ejemplo, el botón "Reintentar").
+  const elegir = (clave) => {
+    cambiarEscenario(clave);
+    if (panelRef.current) panelRef.current.open = false;
+  };
   const modo = estadoMock.modo === 'memoria' ? 'en memoria (sin Service Worker)' : 'Service Worker de MSW';
 
   return (
-    <details className="tarjeta group fixed bottom-4 right-4 z-40 w-[calc(100%-2rem)] max-w-sm open:shadow-xl sm:w-80">
+    <details ref={panelRef} className="tarjeta group fixed bottom-4 right-4 z-40 w-[calc(100%-2rem)] max-w-sm open:shadow-xl sm:w-80">
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold [&::-webkit-details-marker]:hidden">
         <span className="inline-flex items-center gap-2">
           <span aria-hidden="true" className={`h-2.5 w-2.5 rounded-full ${escenario === 'normal' ? 'bg-emerald-500' : 'bg-coral-500'}`} />
@@ -26,7 +33,7 @@ export default function PanelSimulador() {
                 key={clave}
                 type="button"
                 aria-pressed={escenario === clave}
-                onClick={() => cambiarEscenario(clave)}
+                onClick={() => elegir(clave)}
                 className={`rounded-md border px-2 py-1.5 text-xs font-medium transition-colors ${
                   escenario === clave ? 'border-mar-700 bg-mar-700 text-white' : 'border-stone-300 bg-white hover:border-mar-500'
                 }`}

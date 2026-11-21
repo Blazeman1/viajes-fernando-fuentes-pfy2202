@@ -7,6 +7,10 @@ export const MOCK_ACTIVO = import.meta.env.DEV || import.meta.env.VITE_USAR_MOCK
 export const URL_REST = `${import.meta.env.BASE_URL}api`;
 export const URL_GRAPHQL = `${import.meta.env.BASE_URL}graphql`;
 
+// Cabecera que llevan TODAS las respuestas de la API simulada. Si una respuesta
+// llega sin ella, el Service Worker dejó de interceptar (ver api/transporte.js).
+export const CABECERA_MOCK = 'x-api-simulada';
+
 // Cómo se está sirviendo la API simulada. main.jsx lo completa al arrancar:
 //   'service-worker'  MSW intercepta las peticiones (lo normal)
 //   'memoria'         el navegador no permitió el Service Worker y los mismos
