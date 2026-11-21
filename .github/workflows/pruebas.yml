@@ -10,7 +10,9 @@ on:
 
 jobs:
   pruebas:
-    runs-on: ubuntu-latest
+    # Versión fija de Ubuntu: "ubuntu-latest" ya apunta a Ubuntu 26.04, que
+    # Playwright 1.56 no soporta (no puede instalar los navegadores ahí).
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4

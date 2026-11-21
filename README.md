@@ -102,7 +102,7 @@ Playwright compila el sitio igual que para GitHub Pages (`build:pages`), lo sirv
 
 **Dónde se ejecutaron:**
 
-- **GitHub Actions** (`.github/workflows/pruebas.yml`): en cada push a `main` corren lint, Vitest y la suite de Playwright en los 5 navegadores. El reporte HTML queda como artefacto en la pestaña *Actions* del repositorio.
+- **GitHub Actions** (`.github/workflows/pruebas.yml`): en cada push a `main` corren lint, Vitest y la suite de Playwright en los 5 navegadores. El reporte HTML queda como artefacto en la pestaña *Actions* del repositorio. El flujo usa `ubuntu-24.04` en vez de `ubuntu-latest`, porque esta última ya es Ubuntu 26.04 y Playwright 1.56 no puede instalar ahí los navegadores (fue el error de la primera ejecución).
 - **Chrome, Edge y Firefox de escritorio en Windows**: revisión manual con la lista de abajo.
 
 ### Lista de revisión manual
@@ -202,7 +202,7 @@ npm run lint
 
 > El proyecto usa **Vite** en lugar de Create React App, que está descontinuado. Apollo Client 4 se importa igual que en el ejemplo del curso: `ApolloClient`, `InMemoryCache`, `HttpLink` y `gql` desde `@apollo/client`, y `ApolloProvider` y `useQuery` desde `@apollo/client/react`.
 >
-> **Dependencias:** `npm audit` informa un aviso sobre `picomatch` (ReDoS) que todavía no tiene una versión corregida. Afecta solo a herramientas de desarrollo (Vite, Tailwind y Vitest lo usan para buscar archivos) y no forma parte del sitio publicado.
+> **Dependencias:** `npm audit` reporta 0 vulnerabilidades.
 
 ## Publicación en GitHub Pages
 
