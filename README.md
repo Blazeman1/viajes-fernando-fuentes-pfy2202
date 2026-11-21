@@ -36,7 +36,7 @@ Aplicación en **React** donde el usuario explora destinos de viaje, elige uno y
 | 5 | **Componentes modulares y reutilizables** | `components/ui` (Etiqueta, Estrellas, Segmentado, Interruptor, Esqueletos, EstadoError, EstadoVacio), `components/destinos`, `components/opciones` y `components/viaje`. Por ejemplo, `TarjetaVuelo` y `TarjetaHotel` se usan en la lista **y** en "Mi viaje", y `BotonElegir`, `Disponibilidad` y `BarraLista` las comparten. La lógica de negocio (cotizar, validar fechas y cupos) está en funciones puras en `src/utils/` con sus propias pruebas. |
 | 6 | **Estado con useState y useEffect** | `useApi` (`src/hooks/useApi.js`) consulta la API REST con `useState` (datos, error, cargando) y `useEffect` (lanza la petición al cambiar el destino e ignora respuestas obsoletas). `ViajeContext` guarda el viaje con `useState` y lo persiste en `localStorage` con `useEffect`. El aviso se cierra solo con un temporizador en `useEffect`, y los filtros y el orden de cada lista viven en `useState`. Al cambiar un filtro o la cantidad de pasajeros, la interfaz se actualiza al instante y sin nuevas peticiones. |
 | 7 | **GitHub organizado, documentado y publicado en gh-pages** | Estructura por responsabilidad (abajo), commits por etapa, este README y el sitio publicado con `npm run deploy` en la rama `gh-pages`. |
-| 8 | **Pruebas en distintos navegadores** | **Playwright** ejecuta 11 escenarios en **Chromium (Chrome/Edge), Firefox, WebKit (Safari), Android y iPhone**, que suman 55 pruebas. Un **workflow de GitHub Actions** las corre en cada push. Además hay **24 pruebas de Vitest** de las dos APIs y de la lógica del viaje. Esas pruebas encontraron dos errores reales (uno solo en Firefox y otro solo en iPhone) que se corrigieron; están, junto con los demás problemas de compatibilidad, en la sección [Compatibilidad entre navegadores](#compatibilidad-entre-navegadores). |
+| 8 | **Pruebas en distintos navegadores** | **Playwright** ejecuta 12 escenarios en **Chromium (Chrome/Edge), Firefox, WebKit (Safari), Android y iPhone**, que suman 60 pruebas. Un **workflow de GitHub Actions** las corre en cada push. Además hay **24 pruebas de Vitest** de las dos APIs y de la lógica del viaje. Esas pruebas encontraron dos errores reales (uno solo en Firefox y otro solo en iPhone) que se corrigieron; están, junto con los demás problemas de compatibilidad, en la sección [Compatibilidad entre navegadores](#compatibilidad-entre-navegadores). |
 
 ## Contrato de las APIs simuladas
 
@@ -98,7 +98,8 @@ Playwright compila el sitio igual que para GitHub Pages (`build:pages`), lo sirv
 | Armar un viaje | Vuelo + hotel compatible, total correcto, cambio de pasajeros y viaje recordado al recargar |
 | Validación de cupos | Aviso cuando hay más pasajeros que asientos |
 | Error 500 | Mensaje claro y recuperación con *Reintentar* |
-| Service Worker que deja de interceptar | La app pasa sola al modo en memoria (lo que le pasaba a Firefox al recargar) |
+| Recarga con el Service Worker activo | Después de recargar, el Service Worker de la API sigue instalado y en uso (fallaba en Firefox) |
+| Service Worker que deja de interceptar | La app pasa sola al modo en memoria |
 | Sin Service Worker | La app funciona con la API en memoria (como en una ventana privada) |
 
 **Dónde se ejecutaron:**
@@ -111,7 +112,7 @@ La primera ejecución completa pasó 47 de 50 pruebas. Las 3 que fallaron eran e
 
 | Navegador | Qué falló | Causa | Corrección |
 |---|---|---|---|
-| **Firefox** | Al **recargar** una página interna (`/destinos/tokio/hoteles`, `/mi-viaje`) no aparecían los datos | Al recargar, la página que se cierra le avisa al Service Worker de MSW que se fue. En Firefox ese aviso llega cuando la página nueva todavía no figura, el worker cree que no quedan pestañas y se desinstala. Las peticiones salen entonces al servidor estático, que no tiene API. | Todas las respuestas simuladas llevan la cabecera `x-api-simulada`. Si una respuesta llega sin ella, `src/api/transporte.js` pasa al modo en memoria y repite la petición, sin que el usuario lo note. Nueva prueba E2E que reproduce el problema en todos los navegadores. |
+| **Firefox** | Al **recargar** una página interna (`/destinos/tokio/hoteles`, `/mi-viaje`) no aparecían los datos | El reporte de Playwright mostró la página **recargándose sola en ciclo**. Al recargar, MSW le avisa a su Service Worker que la página se fue (`CLIENT_CLOSED`); Firefox procesa ese aviso antes de contar la página nueva, el worker cree que no quedan pestañas y se da de baja. La página nueva queda sin control y MSW, para recuperarlo, llama a `location.reload()`... una y otra vez. | `main.jsx` registra antes que MSW un listener de `beforeunload` que detiene ese aviso: el worker ya no se da de baja al recargar. Como segunda defensa, todas las respuestas simuladas llevan la cabecera `x-api-simulada` y, si una llega sin ella, `src/api/transporte.js` pasa al modo en memoria. Dos pruebas E2E nuevas. |
 | **iPhone (Safari)** | No se podía tocar *Reintentar* después de elegir un escenario en el simulador | En la pantalla del iPhone, el panel abierto tapaba el botón | El panel se cierra solo al elegir un escenario |
 - **Chrome, Edge y Firefox de escritorio en Windows**: revisión manual con la lista de abajo.
 
@@ -135,7 +136,7 @@ Problemas típicos detectados al probar en varios motores, y cómo se resolviero
 |---|---|---|
 | `new Date('2026-12-12')` se interpreta en UTC: en Chile se muestra **un día antes** | Todos, según la zona horaria | Las fechas `AAAA-MM-DD` se arman con `new Date(año, mes, día)` (`src/utils/formato.js`) y las horas se leen del texto. Hay una prueba unitaria para esto. |
 | Ventanas privadas o almacenamiento bloqueado impiden el **Service Worker**, y la API simulada no responde | Firefox (privado), Safari | Si MSW no arranca en 5 s, los mismos handlers responden dentro de la página con `getResponse` de MSW (`src/mocks/memoria.js`) y se muestra un aviso. La app nunca queda en blanco. Hay una prueba E2E con Service Workers bloqueados. |
-| El Service Worker de MSW se desinstala al **recargar** la página y la API deja de responder | Firefox | Respaldo automático al modo en memoria cuando una respuesta llega sin la cabecera `x-api-simulada` (`src/api/transporte.js`). |
+| El Service Worker de MSW se da de baja al **recargar** y la página entra en un ciclo de recargas | Firefox | Se evita el aviso `CLIENT_CLOSED` de MSW al descargar la página (`src/main.jsx`), con respaldo automático al modo en memoria si una respuesta llega sin la cabecera `x-api-simulada` (`src/api/transporte.js`). |
 | `localStorage` lanza una excepción con las cookies bloqueadas | Safari, modos privados | Todo acceso va en `try/catch`. El viaje dura mientras la pestaña esté abierta. |
 | `AbortSignal.any()` y `AbortSignal.timeout()` no existen | Safari < 17.4, Firefox < 124 | El tiempo máximo y la cancelación se combinan a mano con `AbortController` (`src/api/transporte.js`). |
 | Emojis de banderas | Windows (Chrome, Edge, Firefox) muestra solo dos letras | Las "postales" de destino se dibujan con CSS y SVG, sin emojis ni imágenes externas. |
