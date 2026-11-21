@@ -67,7 +67,7 @@ export default function Layout() {
 
       {estadoMock.modo === 'memoria' && (
         <p className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-center text-xs text-amber-800">
-          Tu navegador no permitió el Service Worker de la API simulada (suele pasar en ventanas privadas). La app sigue funcionando con la API simulada en memoria.
+          El Service Worker de la API simulada no está disponible en esta carga (pasa en ventanas privadas y, en Firefox, a veces al recargar). La app sigue funcionando con la API simulada en memoria.
         </p>
       )}
 

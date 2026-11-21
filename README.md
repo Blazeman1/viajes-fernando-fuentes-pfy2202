@@ -98,7 +98,7 @@ Playwright compila el sitio igual que para GitHub Pages (`build:pages`), lo sirv
 | Armar un viaje | Vuelo + hotel compatible, total correcto, cambio de pasajeros y viaje recordado al recargar |
 | Validación de cupos | Aviso cuando hay más pasajeros que asientos |
 | Error 500 | Mensaje claro y recuperación con *Reintentar* |
-| Recarga con el Service Worker activo | Después de recargar, el Service Worker de la API sigue instalado y en uso (fallaba en Firefox) |
+| Recarga sin control del Service Worker | La página no entra en un ciclo de recargas y muestra los datos (fallaba en Firefox) |
 | Service Worker que deja de interceptar | La app pasa sola al modo en memoria |
 | Sin Service Worker | La app funciona con la API en memoria (como en una ventana privada) |
 
@@ -108,11 +108,11 @@ Playwright compila el sitio igual que para GitHub Pages (`build:pages`), lo sirv
 
 ### Errores que encontraron las pruebas en GitHub Actions
 
-La primera ejecución completa pasó 47 de 50 pruebas. Las 3 que fallaron eran errores reales de la aplicación:
+La primera ejecución completa pasó 47 de 50 pruebas. Las 3 que fallaron eran errores reales de la aplicación; el de Firefox necesitó revisar el reporte de Playwright (capturas y registro de la consola) para dar con la causa:
 
 | Navegador | Qué falló | Causa | Corrección |
 |---|---|---|---|
-| **Firefox** | Al **recargar** una página interna (`/destinos/tokio/hoteles`, `/mi-viaje`) no aparecían los datos | El reporte de Playwright mostró la página **recargándose sola en ciclo**. Al recargar, MSW le avisa a su Service Worker que la página se fue (`CLIENT_CLOSED`); Firefox procesa ese aviso antes de contar la página nueva, el worker cree que no quedan pestañas y se da de baja. La página nueva queda sin control y MSW, para recuperarlo, llama a `location.reload()`... una y otra vez. | `main.jsx` registra antes que MSW un listener de `beforeunload` que detiene ese aviso: el worker ya no se da de baja al recargar. Como segunda defensa, todas las respuestas simuladas llevan la cabecera `x-api-simulada` y, si una llega sin ella, `src/api/transporte.js` pasa al modo en memoria. Dos pruebas E2E nuevas. |
+| **Firefox** | Al **recargar** una página interna (`/destinos/tokio/hoteles`, `/mi-viaje`) no aparecían los datos | El reporte de Playwright mostró la página **recargándose sola en ciclo**. Si una página carga sin el control del Service Worker pero su registro existe, MSW llama a `location.reload()` para tomar el control. En Firefox la página recargada volvía a quedar sin control, así que MSW recargaba una y otra vez. | `main.jsx` deja una marca en `sessionStorage` mientras MSW arranca. Si la página vuelve a cargar con la marca puesta, MSW recargó en pleno arranque: esa vez no se inicia y la API responde en memoria (como mucho, una recarga extra). Como segunda defensa, las respuestas simuladas llevan la cabecera `x-api-simulada` y, si una llega sin ella, `src/api/transporte.js` pasa al modo en memoria. Dos pruebas E2E nuevas: una fuerza el ciclo de recargas en cualquier navegador y otra simula un Service Worker que deja de interceptar. |
 | **iPhone (Safari)** | No se podía tocar *Reintentar* después de elegir un escenario en el simulador | En la pantalla del iPhone, el panel abierto tapaba el botón | El panel se cierra solo al elegir un escenario |
 - **Chrome, Edge y Firefox de escritorio en Windows**: revisión manual con la lista de abajo.
 
@@ -136,7 +136,7 @@ Problemas típicos detectados al probar en varios motores, y cómo se resolviero
 |---|---|---|
 | `new Date('2026-12-12')` se interpreta en UTC: en Chile se muestra **un día antes** | Todos, según la zona horaria | Las fechas `AAAA-MM-DD` se arman con `new Date(año, mes, día)` (`src/utils/formato.js`) y las horas se leen del texto. Hay una prueba unitaria para esto. |
 | Ventanas privadas o almacenamiento bloqueado impiden el **Service Worker**, y la API simulada no responde | Firefox (privado), Safari | Si MSW no arranca en 5 s, los mismos handlers responden dentro de la página con `getResponse` de MSW (`src/mocks/memoria.js`) y se muestra un aviso. La app nunca queda en blanco. Hay una prueba E2E con Service Workers bloqueados. |
-| El Service Worker de MSW se da de baja al **recargar** y la página entra en un ciclo de recargas | Firefox | Se evita el aviso `CLIENT_CLOSED` de MSW al descargar la página (`src/main.jsx`), con respaldo automático al modo en memoria si una respuesta llega sin la cabecera `x-api-simulada` (`src/api/transporte.js`). |
+| Al **recargar**, la página queda sin control del Service Worker y MSW entra en un ciclo de recargas | Firefox | Marca de arranque en `sessionStorage` que corta el ciclo y pasa al modo en memoria (`src/main.jsx`), más el respaldo por la cabecera `x-api-simulada` (`src/api/transporte.js`). |
 | `localStorage` lanza una excepción con las cookies bloqueadas | Safari, modos privados | Todo acceso va en `try/catch`. El viaje dura mientras la pestaña esté abierta. |
 | `AbortSignal.any()` y `AbortSignal.timeout()` no existen | Safari < 17.4, Firefox < 124 | El tiempo máximo y la cancelación se combinan a mano con `AbortController` (`src/api/transporte.js`). |
 | Emojis de banderas | Windows (Chrome, Edge, Firefox) muestra solo dos letras | Las "postales" de destino se dibujan con CSS y SVG, sin emojis ni imágenes externas. |

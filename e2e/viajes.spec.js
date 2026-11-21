@@ -189,21 +189,26 @@ test.describe('Robustez', () => {
     await expect(page.locator('html')).toHaveAttribute('data-modo-api', 'memoria');
   });
 
-  // Lo que le pasaba a Firefox: al recargar, MSW avisaba "me fui" y su Service
-  // Worker se daba de baja. Ahora el worker debe seguir instalado y en uso.
-  test('al recargar, el Service Worker de la API sigue instalado', async ({ page }) => {
+  // Lo que le pasaba a Firefox al recargar: la página nueva no quedaba bajo el
+  // control del Service Worker y MSW, para recuperarlo, recargaba la página una
+  // y otra vez. Aquí se fuerza esa situación en cualquier navegador.
+  test('si la página recargada queda sin control del Service Worker, no entra en un ciclo de recargas', async ({ page }) => {
     await page.goto('destinos/tokio/hoteles');
     await expect(page.getByRole('article', { name: /^Hotel / })).toHaveCount(4);
     const modo = await page.evaluate(() => document.documentElement.dataset.modoApi);
     test.skip(modo !== 'service-worker', 'Este navegador ya está en modo en memoria');
 
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator.serviceWorker, 'controller', { get: () => null });
+      navigator.serviceWorker.getRegistrations = () => navigator.serviceWorker.ready.then((r) => [r]);
+    });
+    let cargas = 0;
+    page.on('load', () => cargas++);
     await page.reload();
     await expect(page.getByRole('article', { name: /^Hotel / })).toHaveCount(4);
-    const estado = await page.evaluate(async () => ({
-      modo: document.documentElement.dataset.modoApi,
-      registrado: Boolean(await navigator.serviceWorker.getRegistration()),
-    }));
-    expect(estado).toEqual({ modo: 'service-worker', registrado: true });
+    await page.waitForTimeout(1500);
+    expect(cargas, 'como máximo una recarga extra').toBeLessThanOrEqual(2);
+    await expect(page.getByRole('article', { name: /^Hotel / })).toHaveCount(4);
   });
 });
 
